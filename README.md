@@ -37,7 +37,7 @@ cd codex-account-switcher
 Then run:
 
 ```bash
-./install.sh
+bash install.sh
 ```
 
 The installer places the switcher under:
@@ -184,7 +184,7 @@ Always make a manual backup of `~/.codex/config.toml` before changing a complex 
 Run:
 
 ```bash
-./uninstall.sh
+bash uninstall.sh
 ```
 
 The uninstaller asks which provider you want to leave configured:
