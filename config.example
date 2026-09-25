@@ -1,0 +1,6 @@
+# Amazon Bedrock settings used by codex-account-switcher.
+# Update these values after installation if your setup differs.
+
+CODEX_BEDROCK_MODEL="openai.gpt-6-astra"
+CODEX_BEDROCK_PROFILE="codex-bedrock"
+CODEX_BEDROCK_REGION="us-west-2"
