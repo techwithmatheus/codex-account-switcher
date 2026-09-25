@@ -133,6 +133,9 @@ You can still install the switcher manually. See the Manual installation section
             ;;
     esac
 
+    mkdir -p "$INSTALL_DIR"
+    cp "$SCRIPT_DIR/codex-switcher.zsh" "$INSTALL_FILE"
+
     backup_codex_config
 
     local tmp
@@ -227,9 +230,6 @@ echo "Installing Codex Account Switcher..."
 
 validate_switcher_markers
 
-mkdir -p "$INSTALL_DIR"
-cp "$SCRIPT_DIR/codex-switcher.zsh" "$INSTALL_FILE"
-
 provider=$(active_provider)
 
 if [[ -n "$provider" && "$provider" != "amazon-bedrock" ]]; then
@@ -246,6 +246,8 @@ fi
 
 if [[ "$provider" == "amazon-bedrock" ]]; then
     if grep -Fq "$BEDROCK_START" "$CODEX_CONFIG"; then
+        mkdir -p "$INSTALL_DIR"
+        cp "$SCRIPT_DIR/codex-switcher.zsh" "$INSTALL_FILE"
         echo "Existing switcher-managed Bedrock configuration found."
 
         if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -263,6 +265,8 @@ EOF
         adopt_existing_bedrock
     fi
 else
+    mkdir -p "$INSTALL_DIR"
+    cp "$SCRIPT_DIR/codex-switcher.zsh" "$INSTALL_FILE"
     echo ""
     echo "No active Amazon Bedrock configuration found."
     echo "The current personal ChatGPT/OpenAI configuration will be left unchanged."
