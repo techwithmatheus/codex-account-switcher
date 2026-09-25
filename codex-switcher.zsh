@@ -151,6 +151,21 @@ codex-personal() {
     _codex_validate_markers || return 1
 
     if ! _codex_has_managed_bedrock; then
+        local provider
+        provider=$(_codex_active_provider)
+
+        if [[ "$provider" == "amazon-bedrock" ]]; then
+            echo "Amazon Bedrock is active, but this configuration is not managed by the switcher."
+            echo "No changes were made."
+            return 1
+        fi
+
+        if [[ -n "$provider" ]]; then
+            echo "A custom model provider is currently active: $provider"
+            echo "No changes were made."
+            return 1
+        fi
+
         echo "Already using personal ChatGPT/OpenAI."
         _codex_launch
         return 0
@@ -206,6 +221,15 @@ codex-bedrock() {
         echo "Already using Amazon Bedrock."
         _codex_launch
         return 0
+    fi
+
+    local provider
+    provider=$(_codex_active_provider)
+
+    if [[ "$provider" == "amazon-bedrock" ]]; then
+        echo "Amazon Bedrock is already active, but this configuration is not managed by the switcher."
+        echo "Run the installer again to adopt it, or follow the manual installation guidance."
+        return 1
     fi
 
     _codex_refuse_conflicting_provider || return 1
