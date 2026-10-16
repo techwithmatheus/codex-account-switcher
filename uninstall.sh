@@ -3,6 +3,7 @@
 set -e
 
 INSTALL_DIR="$HOME/.config/codex-switcher"
+PERSONAL_STATE="$INSTALL_DIR/personal-provider-state"
 CODEX_CONFIG="$HOME/.codex/config.toml"
 ZSHRC="$HOME/.zshrc"
 
@@ -40,6 +41,76 @@ remove_bedrock_block() {
 
     cat "$tmp" > "$CODEX_CONFIG"
     rm -f "$tmp"
+}
+
+strip_top_level_provider_keys() {
+    local source="$1"
+    local destination="$2"
+
+    awk '
+        BEGIN {
+            top_level = 1
+        }
+
+        top_level && /^[[:space:]]*\[/ {
+            top_level = 0
+        }
+
+        top_level && /^[[:space:]]*model[[:space:]]*=/ {
+            next
+        }
+
+        top_level && /^[[:space:]]*model_provider[[:space:]]*=/ {
+            next
+        }
+
+        {
+            print
+        }
+    ' "$source" > "$destination"
+}
+
+restore_personal_state() {
+    [[ -s "$PERSONAL_STATE" ]] || return 0
+
+    local stripped
+    local restored
+    stripped=$(mktemp)
+    restored=$(mktemp)
+
+    strip_top_level_provider_keys "$CODEX_CONFIG" "$stripped"
+
+    awk -v state_file="$PERSONAL_STATE" '
+        BEGIN {
+            inserted = 0
+        }
+
+        !inserted && /^[[:space:]]*\[/ {
+            while ((getline line < state_file) > 0) {
+                print line
+            }
+            close(state_file)
+            print ""
+            inserted = 1
+        }
+
+        {
+            print
+        }
+
+        END {
+            if (!inserted) {
+                print ""
+                while ((getline line < state_file) > 0) {
+                    print line
+                }
+                close(state_file)
+            }
+        }
+    ' "$stripped" > "$restored"
+
+    cat "$restored" > "$CODEX_CONFIG"
+    rm -f "$stripped" "$restored"
 }
 
 keep_bedrock_without_markers() {
@@ -108,6 +179,7 @@ if [[ -f "$CODEX_CONFIG" ]] && grep -Fq "$BEDROCK_START" "$CODEX_CONFIG"; then
         1)
             backup_codex_config
             remove_bedrock_block
+            restore_personal_state
             echo "Personal ChatGPT/OpenAI configuration selected."
             ;;
         2)
