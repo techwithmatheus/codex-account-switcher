@@ -8,6 +8,7 @@
 
 _codex_switcher_dir="$HOME/.config/codex-switcher"
 _codex_switcher_config="$_codex_switcher_dir/config"
+_codex_personal_state="$_codex_switcher_dir/personal-provider-state"
 _codex_config="$HOME/.codex/config.toml"
 _codex_app="/Applications/ChatGPT.app"
 
@@ -117,6 +118,10 @@ _codex_launch() {
 
 _codex_active_provider() {
     awk -F '=' '
+        /^[[:space:]]*\[/ {
+            exit
+        }
+
         /^[[:space:]]*model_provider[[:space:]]*=/ {
             value = $2
             gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
@@ -142,6 +147,88 @@ _codex_refuse_conflicting_provider() {
         echo "or follow the manual installation guidance in the repository README."
         return 1
     fi
+}
+
+_codex_save_personal_provider_state() {
+    awk '
+        /^[[:space:]]*\[/ {
+            exit
+        }
+
+        /^[[:space:]]*model[[:space:]]*=/ ||
+        /^[[:space:]]*model_provider[[:space:]]*=/ {
+            print
+        }
+    ' "$_codex_config" > "$_codex_personal_state" || {
+        echo "Could not save the personal provider state."
+        return 1
+    }
+}
+
+_codex_strip_top_level_provider_keys() {
+    local source="$1"
+    local destination="$2"
+
+    awk '
+        BEGIN {
+            top_level = 1
+        }
+
+        top_level && /^[[:space:]]*\[/ {
+            top_level = 0
+        }
+
+        top_level && /^[[:space:]]*model[[:space:]]*=/ {
+            next
+        }
+
+        top_level && /^[[:space:]]*model_provider[[:space:]]*=/ {
+            next
+        }
+
+        {
+            print
+        }
+    ' "$source" > "$destination"
+}
+
+_codex_restore_personal_state() {
+    local source="$1"
+    local destination="$2"
+
+    if [[ ! -s "$_codex_personal_state" ]]; then
+        cp "$source" "$destination"
+        return $?
+    fi
+
+    awk -v state_file="$_codex_personal_state" '
+        BEGIN {
+            inserted = 0
+        }
+
+        !inserted && /^[[:space:]]*\[/ {
+            while ((getline line < state_file) > 0) {
+                print line
+            }
+            close(state_file)
+            print ""
+            inserted = 1
+        }
+
+        {
+            print
+        }
+
+        END {
+            if (!inserted) {
+                print ""
+                while ((getline line < state_file) > 0) {
+                    print line
+                }
+                close(state_file)
+            }
+        }
+    ' "$source" > "$destination"
 }
 
 codex-personal() {
@@ -173,9 +260,16 @@ codex-personal() {
 
     _codex_backup_config || return 1
 
-    local tmp
-    tmp=$(mktemp) || {
-        echo "Could not create temporary file."
+    local without_block
+    local stripped
+    local restored
+    without_block=$(mktemp) || return 1
+    stripped=$(mktemp) || {
+        rm -f "$without_block"
+        return 1
+    }
+    restored=$(mktemp) || {
+        rm -f "$without_block" "$stripped"
         return 1
     }
 
@@ -193,19 +287,31 @@ codex-personal() {
         !skipping {
             print
         }
-    ' "$_codex_config" > "$tmp" || {
+    ' "$_codex_config" > "$without_block" || {
         echo "Could not prepare personal configuration."
-        rm -f "$tmp"
+        rm -f "$without_block" "$stripped" "$restored"
         return 1
     }
 
-    cat "$tmp" > "$_codex_config" || {
+    _codex_strip_top_level_provider_keys "$without_block" "$stripped" || {
+        echo "Could not prepare personal configuration."
+        rm -f "$without_block" "$stripped" "$restored"
+        return 1
+    }
+
+    _codex_restore_personal_state "$stripped" "$restored" || {
+        echo "Could not restore personal provider settings."
+        rm -f "$without_block" "$stripped" "$restored"
+        return 1
+    }
+
+    cat "$restored" > "$_codex_config" || {
         echo "Could not update Codex configuration."
-        rm -f "$tmp"
+        rm -f "$without_block" "$stripped" "$restored"
         return 1
     }
 
-    rm -f "$tmp"
+    rm -f "$without_block" "$stripped" "$restored"
 
     echo "Switched to personal ChatGPT/OpenAI."
     _codex_launch
@@ -234,10 +340,19 @@ codex-bedrock() {
 
     _codex_refuse_conflicting_provider || return 1
     _codex_backup_config || return 1
+    _codex_save_personal_provider_state || return 1
 
-    local tmp
-    tmp=$(mktemp) || {
-        echo "Could not create temporary file."
+    local stripped
+    local rewritten
+    stripped=$(mktemp) || return 1
+    rewritten=$(mktemp) || {
+        rm -f "$stripped"
+        return 1
+    }
+
+    _codex_strip_top_level_provider_keys "$_codex_config" "$stripped" || {
+        echo "Could not prepare Bedrock configuration."
+        rm -f "$stripped" "$rewritten"
         return 1
     }
 
@@ -278,19 +393,19 @@ codex-bedrock() {
                 print "# <<< codex-bedrock-switcher <<<"
             }
         }
-    ' "$_codex_config" > "$tmp" || {
+    ' "$stripped" > "$rewritten" || {
         echo "Could not prepare Bedrock configuration."
-        rm -f "$tmp"
+        rm -f "$stripped" "$rewritten"
         return 1
     }
 
-    cat "$tmp" > "$_codex_config" || {
+    cat "$rewritten" > "$_codex_config" || {
         echo "Could not update Codex configuration."
-        rm -f "$tmp"
+        rm -f "$stripped" "$rewritten"
         return 1
     }
 
-    rm -f "$tmp"
+    rm -f "$stripped" "$rewritten"
 
     echo "Switched to Amazon Bedrock."
     _codex_launch
